@@ -1,0 +1,261 @@
+import speech_recognition as sr
+import os
+import subprocess
+import tkinter as tk
+from tkinter import filedialog, ttk, messagebox
+import tempfile
+from datetime import datetime
+from pytube import YouTube
+import requests
+from urllib.parse import urlparse
+import re
+
+class VideoToTextApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Convertidor de Audio a Texto")
+        self.root.geometry("800x600")
+        
+        # Obtener la carpeta de Descargas
+        self.downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+        
+        # Configurar el estilo
+        style = ttk.Style()
+        style.configure('TButton', padding=5)
+        
+        # Marco principal con padding
+        main_frame = ttk.Frame(root, padding="10")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Variables
+        self.file_path = tk.StringVar()
+        self.url_var = tk.StringVar()
+        self.idioma_var = tk.StringVar(value='es-ES')
+        self.status_var = tk.StringVar(value='Listo para procesar')
+        
+        # Frame para URL
+        url_frame = ttk.LabelFrame(main_frame, text="URL del Video", padding="5")
+        url_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Entry(url_frame, textvariable=self.url_var, width=60).grid(row=0, column=0, padx=5, pady=5)
+        ttk.Button(url_frame, text="Descargar", command=self.descargar_video).grid(row=0, column=1, padx=5, pady=5)
+        
+        # Área de selección de archivo
+        file_frame = ttk.LabelFrame(main_frame, text="O Selecciona un Archivo Local", padding="5")
+        file_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        
+        self.file_entry = ttk.Entry(file_frame, textvariable=self.file_path, width=60)
+        self.file_entry.grid(row=0, column=0, padx=5, pady=5)
+        
+        browse_btn = ttk.Button(file_frame, text="Buscar", command=self.browse_file)
+        browse_btn.grid(row=0, column=1, padx=5, pady=5)
+        
+        # Configuración
+        config_frame = ttk.LabelFrame(main_frame, text="Configuración", padding="5")
+        config_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(config_frame, text="Idioma:").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Entry(config_frame, textvariable=self.idioma_var, width=10).grid(row=0, column=1, padx=5, pady=5)
+        
+        # Botón de procesar
+        process_btn = ttk.Button(main_frame, text="Procesar Audio", command=self.procesar)
+        process_btn.grid(row=3, column=0, columnspan=2, pady=10)
+        
+        # Estado y progreso
+        status_frame = ttk.LabelFrame(main_frame, text="Estado", padding="5")
+        status_frame.grid(row=4, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5)
+        
+        ttk.Label(status_frame, textvariable=self.status_var).grid(row=0, column=0, padx=5, pady=5)
+        
+        # Log y resultado
+        log_frame = ttk.LabelFrame(main_frame, text="Resultado", padding="5")
+        log_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=5)
+        
+        self.log_text = tk.Text(log_frame, height=15, width=80, wrap=tk.WORD)
+        self.log_text.grid(row=0, column=0, padx=5, pady=5)
+        
+        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.log_text['yscrollcommand'] = scrollbar.set
+
+    def descargar_video(self):
+        try:
+            url = self.url_var.get().strip()
+            if not url:
+                messagebox.showerror("Error", "Por favor ingresa una URL")
+                return
+                
+            self.update_status("Descargando video...")
+            self.log_message("Iniciando descarga del video...")
+            
+            # Si es una URL de YouTube
+            if "youtube.com" in url or "youtu.be" in url:
+                try:
+                    yt = YouTube(url)
+                    # Obtener el stream de audio
+                    audio_stream = yt.streams.filter(only_audio=True).first()
+                    
+                    # Descargar a la carpeta de Descargas
+                    archivo_descargado = audio_stream.download(self.downloads_folder)
+                    self.log_message(f"Video descargado como: {archivo_descargado}")
+                    
+                    # Actualizar la ruta del archivo
+                    self.file_path.set(archivo_descargado)
+                    
+                except Exception as e:
+                    self.log_message(f"Error descargando de YouTube: {str(e)}")
+                    raise
+                    
+            # Si es otra URL
+            else:
+                try:
+                    response = requests.get(url, stream=True)
+                    response.raise_for_status()
+                    
+                    # Obtener el nombre del archivo de la URL o generar uno
+                    filename = os.path.basename(urlparse(url).path)
+                    if not filename or len(filename) < 5:
+                        filename = "video_descargado.mp4"
+                        
+                    file_path = os.path.join(self.downloads_folder, filename)
+                    
+                    # Descargar el archivo
+                    with open(file_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                
+                    self.log_message(f"Archivo descargado como: {file_path}")
+                    self.file_path.set(file_path)
+                    
+                except Exception as e:
+                    self.log_message(f"Error descargando archivo: {str(e)}")
+                    raise
+                    
+            self.update_status("Descarga completada")
+            messagebox.showinfo("Éxito", "Video descargado correctamente")
+            
+        except Exception as e:
+            self.log_message(f"Error en la descarga: {str(e)}")
+            messagebox.showerror("Error", f"Error durante la descarga: {str(e)}")
+            self.update_status("Error en la descarga")
+
+    def log_message(self, message):
+        """Añade un mensaje al área de log con timestamp"""
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
+        self.log_text.see(tk.END)
+        self.root.update()
+
+    def browse_file(self):
+        filetypes = (
+            ('Archivos de audio/video', '*.mp3 *.mp4 *.wav *.avi *.mkv *.m4a'),
+            ('Todos los archivos', '*.*')
+        )
+        filename = filedialog.askopenfilename(
+            title='Selecciona un archivo',
+            filetypes=filetypes
+        )
+        if filename:
+            self.file_path.set(filename)
+
+    def update_status(self, message):
+        self.status_var.set(message)
+        self.root.update()
+
+    def verificar_ffmpeg(self):
+        try:
+            result = subprocess.run(['ffmpeg', '-version'], 
+                                 capture_output=True, 
+                                 text=True)
+            self.log_message("FFmpeg encontrado y funcionando correctamente")
+            return True
+        except Exception as e:
+            self.log_message(f"Error verificando FFmpeg: {str(e)}")
+            return False
+
+    def procesar(self):
+        try:
+            archivo = self.file_path.get().strip()
+            if not archivo:
+                messagebox.showerror("Error", "Por favor selecciona un archivo o descarga un video")
+                return
+            
+            if not os.path.exists(archivo):
+                messagebox.showerror("Error", "El archivo seleccionado no existe")
+                return
+            
+            # Verificar FFmpeg
+            self.update_status("Verificando FFmpeg...")
+            if not self.verificar_ffmpeg():
+                messagebox.showerror("Error", "FFmpeg no está disponible")
+                return
+            
+            # Crear directorio temporal
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Convertir a WAV
+                self.update_status("Convirtiendo archivo a WAV...")
+                self.log_message("Iniciando conversión a WAV...")
+                
+                archivo_wav = os.path.join(temp_dir, "audio.wav")
+                comando_ffmpeg = [
+                    'ffmpeg',
+                    '-i', archivo,
+                    '-acodec', 'pcm_s16le',
+                    '-ar', '16000',
+                    '-ac', '1',
+                    archivo_wav
+                ]
+                
+                self.log_message(f"Ejecutando comando: {' '.join(comando_ffmpeg)}")
+                
+                result = subprocess.run(comando_ffmpeg, 
+                                     capture_output=True, 
+                                     text=True)
+                
+                if result.returncode != 0:
+                    self.log_message(f"Error en FFmpeg: {result.stderr}")
+                    messagebox.showerror("Error", "Error al convertir el archivo")
+                    return
+                
+                self.log_message("Conversión a WAV completada")
+                
+                # Reconocimiento de voz
+                self.update_status("Realizando reconocimiento de voz...")
+                self.log_message("Iniciando reconocimiento de voz...")
+                
+                recognizer = sr.Recognizer()
+                with sr.AudioFile(archivo_wav) as source:
+                    audio = recognizer.record(source)
+                    
+                self.log_message("Audio cargado, procesando texto...")
+                texto = recognizer.recognize_google(audio, language=self.idioma_var.get())
+                
+                # Guardar la transcripción
+                nombre_base = os.path.splitext(os.path.basename(archivo))[0]
+                archivo_transcripcion = os.path.join(self.downloads_folder, f"{nombre_base}_transcripcion.txt")
+                
+                with open(archivo_transcripcion, 'w', encoding='utf-8') as f:
+                    f.write(texto)
+                
+                self.log_message(f"Transcripción guardada en: {archivo_transcripcion}")
+                self.log_message("\nTexto reconocido:")
+                self.log_message("-" * 40)
+                self.log_message(texto)
+                self.log_message("-" * 40)
+                
+                self.update_status("Proceso completado")
+                messagebox.showinfo("Éxito", f"Proceso completado con éxito\nTranscripción guardada en: {archivo_transcripcion}")
+                
+        except Exception as e:
+            self.log_message(f"Error: {str(e)}")
+            messagebox.showerror("Error", f"Error durante el proceso: {str(e)}")
+            self.update_status("Error en el proceso")
+
+def main():
+    root = tk.Tk()
+    app = VideoToTextApp(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
