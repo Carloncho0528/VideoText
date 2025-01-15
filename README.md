@@ -5,7 +5,7 @@
 ## 📝 Descripción
 AudioText Converter es una aplicación de escritorio potente y fácil de usar que convierte audio y video a texto. Diseñada para hacer la transcripción accesible para todos, permite procesar tanto archivos locales como contenido de YouTube y otras fuentes en línea.
 
-![AudioText Converter Screenshot](screenshot.png)
+![VideoText Converter Screenshot](screenshot.png)
 
 ## ✨ Características Principales
 
@@ -46,7 +46,7 @@ AudioText Converter es una aplicación de escritorio potente y fácil de usar qu
 
 1. Clone el repositorio:
    ```bash
-   git clone https://github.com/tuusuario/audiotext-converter.git
+   git clone https://github.com/Carloncho0528Videotext-converter.git
    cd audiotext-converter
    ```
 
